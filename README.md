@@ -70,7 +70,7 @@ service waits for presses with `gpiod`:
 
 - **single press**: show `home` as a full-screen tmux popup (any key closes it)
 - **double press**: open `pet` as a popup, or jump to the tmux window where `pet` already runs
-- **hold (~1 s)**: open the PicoClaw AI assistant (`picoclaw agent`) as a popup
+- **hold (~1 s)**: open the PicoClaw AI assistant (`claw`) as a popup
 
 ## beepy-claw (PicoClaw + Claude)
 
@@ -85,6 +85,10 @@ cloud. Install `picoclaw_armv7.deb` from its releases, run `picoclaw onboard`, t
   (`127.0.0.1:8787`) strips that field and forwards everything else to api.anthropic.com,
   streaming included. Point the Claude models' `api_base` at `http://127.0.0.1:8787/v1`.
   Remove it once PicoClaw stops sending `temperature`.
+
+- [`claw.py`](beepy-claw/claw.py) (installed as `claw`): runs `picoclaw agent` in a
+  pseudo-terminal and strips the 🦞 PicoClaw prints everywhere (the console font can't
+  draw it). Quit the chat with `exit`, `quit`, Ctrl+C or Ctrl+D, or press the side button.
 
 Models configured in `~/.picoclaw/config.json`: `claude` (claude-sonnet-5-5, default) and
 `claude-fast` (claude-haiku-5-5). PicoClaw's tools stay inside `~/.picoclaw/workspace`.
@@ -121,6 +125,7 @@ sudo install -m 644 beepy-button/beepy-button.service /etc/systemd/system/
 
 # PicoClaw helpers (after installing picoclaw_armv7.deb and running `picoclaw onboard`)
 sudo install -m 755 beepy-claw/set-claude-key /usr/local/bin/set-claude-key
+sudo install -m 755 beepy-claw/claw.py /usr/local/bin/claw
 sudo install -m 755 beepy-claw/claude-param-proxy.py /usr/local/bin/claude-param-proxy
 sudo install -m 644 beepy-claw/claude-param-proxy.service /etc/systemd/system/
 

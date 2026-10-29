@@ -27,7 +27,7 @@ APPS = {
     "home": "home; read -rsn1",
     "pet": "pet",
     # If PicoClaw exits with an error (e.g. no API key yet), keep the message on screen.
-    "claw": "picoclaw agent || { echo; echo 'PicoClaw stopped (run set-claude-key?)'; "
+    "claw": "claw || { echo; echo 'PicoClaw stopped (run set-claude-key?)'; "
             "echo 'Press any key to close.'; read -rsn1; }",
 }
 
