@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Beepy side button (GPIO 17): single press shows `home`, double press opens `pet`,
-hold (~1 s) opens the PicoClaw AI assistant.
+hold (~1 s) opens the PicoClaw AI assistant in its own tmux window (scrollable).
 
 The button shorts GPIO 17 to ground, so the line uses the Pi's internal pull-up and a
 press is a falling edge. Apps open as a full-screen tmux popup over whatever is on the
@@ -22,6 +22,7 @@ DEBOUNCE_S = 0.08      # contact bounce is a few ms; presses are ~150 ms apart a
 DOUBLE_PRESS_S = 0.4   # a second press within this window makes it a double press
 HOLD_S = 0.8           # still pressed after this long = a hold
 MARKER = "/tmp/beepy-button-popup"  # exists while a popup we opened is showing
+CLAW_WINDOW = "claw"  # tmux window name for PicoClaw
 # home draws once and exits, so wait for a key to keep the snapshot on screen.
 APPS = {
     "home": "home; read -rsn1",
@@ -94,8 +95,17 @@ def on_double(client):
 
 
 def on_hold(client):
+    """PicoClaw runs in its own tmux window (not a popup) so long answers keep scrollback."""
     close_popup(client)
-    open_popup(client, "claw")
+    window = tmux("list-windows", "-a", "-F", "#{session_name}:#{window_index} #{window_name}").stdout
+    existing = [line.split()[0] for line in window.splitlines() if line.split()[1:] == [CLAW_WINDOW]]
+    if existing:
+        tmux("switch-client", "-c", client, "-t", existing[0])
+        print(f"button: switched to {existing[0]}", flush=True)
+        return
+    session = tmux("display-message", "-p", "-c", client, "#{session_name}").stdout.strip()
+    tmux("new-window", "-t", f"{session}:", "-n", CLAW_WINDOW, APPS["claw"])
+    print("button: opened claw window", flush=True)
 
 
 def is_press(event):

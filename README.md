@@ -70,7 +70,8 @@ service waits for presses with `gpiod`:
 
 - **single press**: show `home` as a full-screen tmux popup (any key closes it)
 - **double press**: open `pet` as a popup, or jump to the tmux window where `pet` already runs
-- **hold (~1 s)**: open the PicoClaw AI assistant (`claw`) as a popup
+- **hold (~1 s)**: open the PicoClaw AI assistant (`claw`) in its own tmux window named
+  `claw` (a window, not a popup, so long answers keep scrollback), or jump back to it
 
 ## beepy-claw (PicoClaw + Claude)
 
@@ -97,6 +98,9 @@ Models configured in `~/.picoclaw/config.json`: `claude` (claude-sonnet-5-5, def
 
 - [`home`](beepy-home/home): clock, weather, battery, Wi-Fi + IP, a one-line pet summary
   and system stats on one 50×13 screen. `home -w` refreshes every 30 s.
+- [`tmux-pageup-scroll.conf`](beepy-home/tmux-pageup-scroll.conf): append to `~/.tmux.conf`.
+  Page Up (Beepy: click the touchpad for Meta mode, then `O`) enters tmux scroll mode;
+  then touchpad/arrows or `O`/`P` scroll, Back (Esc) or `q` returns.
 - [`neofetch-config.conf`](beepy-home/neofetch-config.conf): no logo, short values, one
   screenful, plus a battery line read from the Beepy firmware.
 

@@ -24,13 +24,19 @@ pending = b""     # a partial emoji split across two reads waits here for the re
 in_banner = True  # until the first real line, drop the banner and its blank lines
 
 
+def is_banner_line(text):
+    """The logo is almost all block/box glyphs; a reply with a stray █ is not."""
+    chars = [c for c in text if not c.isspace()]
+    return sum(c in BANNER_GLYPHS for c in chars) > len(chars) / 2
+
+
 def skip_banner(data):
     """Drop leading banner/blank lines; return what's left once real output starts."""
     global in_banner
     lines = data.split(b"\n")
     for i, line in enumerate(lines[:-1]):  # only judge complete lines
         text = ANSI.sub(b"", line).decode("utf-8", "replace").strip()
-        if text and not BANNER_GLYPHS & set(text):
+        if text and not is_banner_line(text):
             in_banner = False
             return b"\n".join(lines[i:]), b""
     return b"", lines[-1]  # still in the banner: keep the unfinished line for later
@@ -64,9 +70,10 @@ def main():
     saved = termios.tcgetattr(stdin) if os.isatty(stdin) else None
     if saved:
         tty.setraw(stdin)
+    watch = [master, stdin]
     try:
         while True:
-            ready, _, _ = select.select([master, stdin], [], [])
+            ready, _, _ = select.select(watch, [], [])
             if master in ready:
                 try:
                     out = strip_logo(master)
@@ -76,12 +83,16 @@ def main():
                     os.write(sys.stdout.fileno(), out)
             if stdin in ready:
                 data = os.read(stdin, 1024)
-                if not data:
-                    break
-                os.write(master, data)
+                if data:
+                    os.write(master, data)
+                else:  # our input ran out (e.g. `claw -m ... < /dev/null`): keep showing output
+                    watch = [master]
     finally:
         if saved:
             termios.tcsetattr(stdin, termios.TCSAFLUSH, saved)
+    leftover = pending.replace(LOBSTER, b"")  # text held back when PicoClaw exited
+    if leftover and not (in_banner and is_banner_line(ANSI.sub(b"", leftover).decode("utf-8", "replace"))):
+        os.write(sys.stdout.fileno(), leftover)
     _, status = os.waitpid(pid, 0)
     sys.exit(os.waitstatus_to_exitcode(status))
 
