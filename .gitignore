@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+# Private: ntfy topic and Gmail web-app URL with its secret key (see beepy-pager.conf.example)
+beepy-pager/beepy-pager.conf

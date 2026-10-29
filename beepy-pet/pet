@@ -1,0 +1,3 @@
+#!/bin/sh
+# Launch the Beepy virtual pet.
+exec python3 /usr/local/lib/beepy-pet/pet_app.py "$@"

@@ -1,0 +1,177 @@
+#!/bin/bash
+# Beepy home screen. Usage: home        show once
+#                           home -w     live view, refreshes every 30s, any key exits
+#                           home -r     force weather refresh
+# Layout: 50 cols x 13 rows, CP437 glyphs only, no colours (reverse video only).
+
+B=/sys/firmware/beepy
+CACHE="$HOME/.cache/beepy-home"
+WFILE="$CACHE/weather"
+W=50
+mkdir -p "$CACHE"
+case "${LC_ALL:-${LC_CTYPE:-$LANG}}" in *UTF-8*|*utf8*) ;; *) export LC_CTYPE=C.UTF-8 ;; esac
+
+RV=$'\e[7m'; BD=$'\e[1m'; R0=$'\e[0m'
+
+# --- helpers (character-aware padding; bash printf pads by bytes) ------------
+rep()  { local s="" i; for ((i = 0; i < $2; i++)); do s+="$1"; done; printf '%s' "$s"; }
+padr() { local s="$1" n=$2; s="${s:0:n}"; printf '%s%*s' "$s" $((n - ${#s})) ''; }
+rule() { printf ' %s\n' "$(rep '─' $((W - 2)))"; }
+
+# --- big 3-row clock (3x3 cells per digit, half-block glyphs) ----------------
+D0=("█▀█" "█ █" "▀▀▀"); D1=("▀█ " " █ " "▀▀▀"); D2=("▀▀█" "█▀▀" "▀▀▀")
+D3=("▀▀█" " ▀█" "▀▀▀"); D4=("█ █" "▀▀█" "  ▀"); D5=("█▀▀" "▀▀█" "▀▀▀")
+D6=("█▀▀" "█▀█" "▀▀▀"); D7=("▀▀█" "  █" "  ▀"); D8=("█▀█" "█▀█" "▀▀▀")
+D9=("█▀█" "▀▀█" "▀▀▀"); DC=("▄" "▄" " ")
+bigrow() {  # $1=HHMM $2=row
+    local t=$1 r=$2 out="" i d ref
+    for i in 0 1 2 3; do
+        d=${t:i:1}; ref="D$d[$r]"; out+="${!ref}"
+        if [ $i -eq 1 ]; then out+=" ${DC[r]} "; elif [ $i -lt 3 ]; then out+=" "; fi
+    done
+    printf '%s' "$out"
+}
+
+# --- data --------------------------------------------------------------------
+refresh_weather() {
+    local w
+    w=$(curl -s -m 8 'https://wttr.in/?format=%C+%t&u' 2>/dev/null)
+    if [ -n "$w" ] && [[ "$w" != *"Unknown"* ]] && [[ "$w" != *"<"* ]]; then
+        printf '%s' "$w" | sed 's/°/ /' | tr -s ' ' > "$WFILE.tmp" && mv "$WFILE.tmp" "$WFILE"
+    fi
+}
+
+weather() {  # sets WX_COND WX_TEMP WX_AGE
+    WX_COND=""; WX_TEMP=""; WX_AGE=""
+    if [ ! -s "$WFILE" ] || [ -n "$(find "$WFILE" -mmin +30 2>/dev/null)" ]; then
+        ( refresh_weather & ) >/dev/null 2>&1
+    fi
+    [ -s "$WFILE" ] || return
+    local raw a t u m n
+    raw=$(head -c 60 "$WFILE"); read -ra a <<< "$raw"
+    if [ ${#a[@]} -ge 3 ] && [[ ${a[-2]} =~ ^[+-]?[0-9]+$ ]]; then
+        t=${a[-2]#+}; u=${a[-1]}; n=${#a[@]}; unset "a[n-1]" "a[n-2]"
+        WX_TEMP="${t}°${u}"; WX_COND="${a[*]}"
+    else
+        WX_COND="$raw"
+    fi
+    m=$(( ($(date +%s) - $(stat -c %Y "$WFILE")) / 60 ))
+    if [ $m -lt 1 ]; then WX_AGE="just now"
+    elif [ $m -lt 60 ]; then WX_AGE="${m}m ago"
+    else WX_AGE="$((m / 60))h ago"; fi
+}
+
+wx_icon() {
+    case "${1,,}" in
+        *sun*|*clear*) printf '☼' ;;
+        *thunder*)     printf '▼' ;;
+        *snow*|*sleet*|*ice*) printf '·' ;;
+        *) printf '■' ;;
+    esac
+}
+
+battery() {
+    local p v n bar
+    p=$(cat $B/battery_percent 2>/dev/null)
+    v=$(cat $B/battery_volts 2>/dev/null)
+    if ! [[ "$p" =~ ^[0-9]+$ ]]; then printf '%s%s' "$(rep '░' 20)" "▌   ?%"; return; fi
+    [ "$p" -gt 100 ] && p=100
+    n=$(( (p + 2) / 5 ))
+    bar="$(rep '▓' $n)$(rep '░' $((20 - n)))▌"
+    [[ "$v" =~ ^[0-9.]+$ ]] && v=$(printf '%.2fV' "$v") || v="?V"
+    printf '%s %4s  %s' "$bar" "$p%" "$v"
+    [ "$p" -le 15 ] && printf '  %s LOW %s' "$RV" "$R0"
+}
+
+wifi() {
+    local con ssid lvl q n i bars="" lv=("▓" "▓" "▓" "▓")
+    con=$(nmcli -t -g GENERAL.CONNECTION dev show wlan0 2>/dev/null)
+    if [ -z "$con" ]; then printf '····  %s' "$(padr 'not connected' 12)"; return; fi
+    ssid=$(nmcli -t -g 802-11-wireless.ssid con show "$con" 2>/dev/null)
+    [ -z "$ssid" ] && ssid="$con"
+    read -r q lvl < <(awk '/wlan0/ {gsub("\.","",$3); gsub("\.","",$4); print $3, $4}' /proc/net/wireless 2>/dev/null)
+    q=${q:-0}; [[ "$q" =~ ^[0-9]+$ ]] || q=0
+    if   [ "$q" -ge 55 ]; then n=4
+    elif [ "$q" -ge 40 ]; then n=3
+    elif [ "$q" -ge 25 ]; then n=2
+    else n=1; fi
+    for i in 0 1 2 3; do [ $i -lt $n ] && bars+="${lv[i]}" || bars+="░"; done
+    # IP starts at col 25, the same second column as LOAD/DISK below
+    printf '%s  %s %s  %s' "$bars" "$(padr "$ssid" 12)" "${ip:---}" "${lvl:-?}dBm"
+}
+
+uptime_s() {
+    local s d h m
+    s=$(cut -d. -f1 /proc/uptime); d=$((s / 86400)); h=$((s % 86400 / 3600)); m=$((s % 3600 / 60))
+    if [ $d -gt 0 ]; then printf '%dd %dh' $d $h
+    elif [ $h -gt 0 ]; then printf '%dh %02dm' $h $m
+    else printf '%dm' $m; fi
+}
+
+pet_line() {  # one-line pet summary from `pet --status`; never breaks home
+    local s f name stage age mood glyph need asleep hatch sa left b
+    s=$(command -v pet >/dev/null && timeout 5 pet --status 2>/dev/null)
+    if [ "$s" = "none" ]; then printf ' %-5s%s\n' "PET" "·  no sheep yet · type pet to adopt"; return; fi
+    IFS=$'\t' read -r name stage age mood glyph f f f f need asleep hatch <<< "$s"
+    if [ -z "$name" ] || [ -z "$stage" ]; then printf ' %-5s%s\n' "PET" "·  --"; return; fi
+    if [ "$mood" = "gone" ]; then
+        printf ' %-5s○ %s  %s\n' "PET" "$(padr "$name" 8)" "ran away to Grandma · type pet"; return
+    fi
+    if [ "$stage" = "EGG" ]; then
+        if [ "${hatch:-0}" -ge 60 ]; then sa="EGG · hatch $((hatch / 60))h"; else sa="EGG · hatch ${hatch}m"; fi
+        mood=""; need="-"
+    else
+        [[ "$age" == *d\ * ]] && [ "${age%%d*}" -ge 100 ] && age="${age%% *}"   # 100d+: drop hours
+        sa="$stage · $age"
+    fi
+    [ "$asleep" = "1" ] && [ "$need" = "TIRED" ] && need="-"                    # already resting
+    left=$(printf ' %-5s%s %s  %s' "PET" "$glyph" "$(padr "$name" 8)" "$(padr "$sa" 15)")
+    if [ -n "$need" ] && [ "$need" != "-" ]; then
+        b=" $need "
+        printf '%s%*s%s%s%s\n' "$left" $((W - 33 - ${#b})) '' "$RV" "$b" "$R0"
+    else
+        printf '%s  %s\n' "$left" "$mood"
+    fi
+}
+
+# --- screen ------------------------------------------------------------------
+draw() {
+    local hm now t mem disk load ip left right side i
+    hm=$(date +%H%M)
+    weather
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    t=$(( $(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0) / 1000 ))
+    mem=$(free -m | awk '/Mem:/ {print $3"/"$2"M"}')
+    disk=$(df -h / | awk 'NR==2 {print $3"/"$2}')
+    load=$(cut -d' ' -f1 /proc/loadavg)
+    local bat net; bat=$(battery); net=$(wifi)
+
+    side[0]="$(date '+%A')"
+    side[1]="$(date '+%-d %B %Y')"
+    if [ -n "$WX_TEMP" ]; then side[2]="$(wx_icon "$WX_COND") $WX_TEMP  ${WX_COND}"
+    elif [ -n "$WX_COND" ]; then side[2]="■ $WX_COND"
+    else side[2]="· weather pending"; fi
+
+    clear
+    left=" ■ $(hostname)"; right="up $(uptime_s) "
+    printf '%s%s%*s%s%s\n' "$RV" "$left" $((W - ${#left} - ${#right})) '' "$right" "$R0"
+    for i in 0 1 2; do
+        printf '  %s%s%s   │ %s\n' "$BD" "$(bigrow "$hm" $i)" "$R0" "$(padr "${side[i]}" 26)"
+    done
+    echo
+    printf ' %-5s%s\n' "BATT" "$bat"
+    printf ' %-5s%s\n' "WIFI" "$net"
+    pet_line
+    rule
+    printf ' %-5s%-19s%-5s%s\n' "CPU" "$(padr "${t}°C" 19)" "LOAD" "$load"
+    printf ' %-5s%-19s%-5s%s\n' "MEM" "$mem" "DISK" "$disk"
+    rule
+    printf ' home -w live  ·  bat  ·  hold End Call: menu'
+    echo
+}
+
+case "$1" in
+    -r) refresh_weather; draw ;;
+    -w) while true; do draw; read -rs -n1 -t 30 && break; done; clear ;;
+    *)  draw ;;
+esac

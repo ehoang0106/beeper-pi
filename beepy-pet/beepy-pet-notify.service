@@ -1,0 +1,7 @@
+[Unit]
+Description=Page the owner when the Beepy pet needs care
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/beepy-pet/pet_notify.py

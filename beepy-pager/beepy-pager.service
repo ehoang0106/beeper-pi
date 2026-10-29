@@ -1,0 +1,12 @@
+[Unit]
+Description=Beepy LED pager (ntfy subscriber)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/bin/beepy-pager
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

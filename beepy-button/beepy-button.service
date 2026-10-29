@@ -1,0 +1,12 @@
+[Unit]
+Description=Beepy side button: show the home screen
+After=multi-user.target
+
+[Service]
+User=pi
+ExecStart=/usr/bin/python3 /usr/local/bin/beepy-button
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

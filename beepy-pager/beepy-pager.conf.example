@@ -1,0 +1,6 @@
+# Copy to /etc/beepy-pager.conf (mode 600). Keep the real values private.
+# ntfy topic to listen on. Anyone who knows the name can send pages, so make it long and random.
+TOPIC=beepy-CHANGE-ME-random-topic-name
+SERVER=https://ntfy.sh
+# Optional: Gmail web app (gmail-inbox-web-app.gs) URL; key= must match SECRET in the script.
+GMAIL_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?key=CHANGE_ME_SECRET
