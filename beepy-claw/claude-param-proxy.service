@@ -1,0 +1,12 @@
+[Unit]
+Description=Local relay that strips `temperature` for PicoClaw -> Claude
+After=network-online.target
+
+[Service]
+User=pi
+ExecStart=/usr/bin/python3 /usr/local/bin/claude-param-proxy
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

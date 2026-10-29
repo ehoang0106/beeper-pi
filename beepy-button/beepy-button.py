@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Beepy side button (GPIO 17): single press shows `home`, double press opens `pet`.
+"""Beepy side button (GPIO 17): single press shows `home`, double press opens `pet`,
+hold (~1 s) opens the PicoClaw AI assistant.
 
 The button shorts GPIO 17 to ground, so the line uses the Pi's internal pull-up and a
 press is a falling edge. Apps open as a full-screen tmux popup over whatever is on the
@@ -19,9 +20,16 @@ CHIP = "/dev/gpiochip0"
 LINE = 17
 DEBOUNCE_S = 0.08      # contact bounce is a few ms; presses are ~150 ms apart at the fastest
 DOUBLE_PRESS_S = 0.4   # a second press within this window makes it a double press
+HOLD_S = 0.8           # still pressed after this long = a hold
 MARKER = "/tmp/beepy-button-popup"  # exists while a popup we opened is showing
 # home draws once and exits, so wait for a key to keep the snapshot on screen.
-APPS = {"home": "home; read -rsn1", "pet": "pet"}
+APPS = {
+    "home": "home; read -rsn1",
+    "pet": "pet",
+    # If PicoClaw exits with an error (e.g. no API key yet), keep the message on screen.
+    "claw": "picoclaw agent || { echo; echo 'PicoClaw stopped (run set-claude-key?)'; "
+            "echo 'Press any key to close.'; read -rsn1; }",
+}
 
 
 def tmux(*args):
@@ -85,26 +93,51 @@ def on_double(client):
         open_popup(client, "pet")
 
 
+def on_hold(client):
+    close_popup(client)
+    open_popup(client, "claw")
+
+
+def is_press(event):
+    return event.event_type == event.Type.FALLING_EDGE
+
+
+def released_within(req, seconds):
+    """Wait up to `seconds` for the button to be let go. True if it was released."""
+    deadline = time.monotonic() + seconds
+    while (remaining := deadline - time.monotonic()) > 0 and req.wait_edge_events(remaining):
+        if any(not is_press(e) for e in req.read_edge_events()):
+            return True
+    return False
+
+
 def count_presses(req):
-    """After a first press, count further presses inside the double-press window."""
+    """After a first press (already released), count further presses in the double-press window."""
     presses, last = 1, time.monotonic()
     deadline = last + DOUBLE_PRESS_S
     while (remaining := deadline - time.monotonic()) > 0 and req.wait_edge_events(remaining):
-        for _ in req.read_edge_events():
+        for e in req.read_edge_events():
             now = time.monotonic()
-            if now - last >= DEBOUNCE_S:
+            if is_press(e) and now - last >= DEBOUNCE_S:
                 presses, last = presses + 1, now
     return presses
 
 
 def main():
-    settings = gpiod.LineSettings(direction=Direction.INPUT, bias=Bias.PULL_UP, edge_detection=Edge.FALLING)
+    # Both edges: presses (falling) and releases (rising), so a hold can be told from a tap.
+    settings = gpiod.LineSettings(direction=Direction.INPUT, bias=Bias.PULL_UP, edge_detection=Edge.BOTH)
     with gpiod.request_lines(CHIP, consumer="beepy-button", config={LINE: settings}) as req:
         print(f"watching GPIO {LINE}", flush=True)
         while True:
-            req.read_edge_events()  # blocks until the first press
-            presses = count_presses(req)
+            if not any(is_press(e) for e in req.read_edge_events()):  # blocks; skip stray releases
+                continue
+            held = not released_within(req, HOLD_S)
             client = first_client()
+            if held:  # open right away while still held, then wait for the release
+                on_hold(client) if client else print("button: no tmux client", flush=True)
+                released_within(req, 30)
+                continue
+            presses = count_presses(req)
             if client is None:
                 print("button: no tmux client, nothing to show", flush=True)
             elif presses >= 2:

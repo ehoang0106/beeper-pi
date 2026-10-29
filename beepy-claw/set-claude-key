@@ -1,0 +1,22 @@
+#!/bin/bash
+# Store a Claude API key for PicoClaw without showing it on screen or in shell history.
+# Writes it into ~/.picoclaw/.security.yml for the "claude" and "claude-fast" models.
+set -e
+SEC="$HOME/.picoclaw/.security.yml"
+read -rsp "Paste your Claude API key (hidden): " KEY; echo
+case "$KEY" in sk-ant-*) ;; *) echo "That doesn't look like a Claude key (should start with sk-ant-). Nothing changed."; exit 1;; esac
+cp "$SEC" "$SEC.bak"
+KEY="$KEY" python3 - "$SEC" <<'PY'
+import os, re, sys
+path, key = sys.argv[1], os.environ["KEY"]
+text = open(path).read()
+for name in ("claude", "claude-fast"):
+    block = f'  {name}:0:\n    api_keys:\n      - "{key}"\n'
+    # Replace an empty entry or a previous key block for this model.
+    text, n = re.subn(rf"^  {re.escape(name)}:0:.*\n(?:    .*\n)*", block, text, flags=re.M)
+    if n == 0:
+        text = text.replace("model_list:\n", "model_list:\n" + block, 1)
+open(path, "w").write(text)
+PY
+chmod 600 "$SEC"
+echo "Saved. Test it with:  picoclaw agent -m \"Say hi in 5 words\""

@@ -9,7 +9,8 @@ console's 50×13 text screen and its CP437 font.
 |---|---|
 | [`beepy-pager/`](beepy-pager) | Turns the RGB LED into a pager: ntfy.sh pages, Outlook and Gmail mail alerts |
 | [`beepy-pet/`](beepy-pet) | **Mochi**, a Shaun-the-Sheep-inspired virtual pet with mini-games |
-| [`beepy-button/`](beepy-button) | Side button: press once for `home`, double-press for `pet` |
+| [`beepy-button/`](beepy-button) | Side button: press once for `home`, double-press for `pet`, hold for PicoClaw |
+| [`beepy-claw/`](beepy-claw) | Helpers to run the [PicoClaw](https://github.com/sipeed/picoclaw) AI assistant with Claude |
 | [`beepy-home/`](beepy-home) | The `home` status screen and a neofetch config that fit the small screen |
 
 ## beepy-pager
@@ -69,6 +70,24 @@ service waits for presses with `gpiod`:
 
 - **single press**: show `home` as a full-screen tmux popup (any key closes it)
 - **double press**: open `pet` as a popup, or jump to the tmux window where `pet` already runs
+- **hold (~1 s)**: open the PicoClaw AI assistant (`picoclaw agent`) as a popup
+
+## beepy-claw (PicoClaw + Claude)
+
+[PicoClaw](https://github.com/sipeed/picoclaw) by Sipeed is a tiny AI-assistant program
+(single Go binary, ~10-20 MB RAM) that runs fine on the Pi Zero 2 W; the model runs in the
+cloud. Install `picoclaw_armv7.deb` from its releases, run `picoclaw onboard`, then:
+
+- [`set-claude-key`](beepy-claw/set-claude-key): asks for your Claude API key with hidden
+  input and stores it in `~/.picoclaw/.security.yml` (never on screen or in shell history).
+- [`claude-param-proxy.py`](beepy-claw/claude-param-proxy.py): PicoClaw v0.3.1 always sends
+  `temperature`, which Claude Sonnet/Haiku 5.5 reject. This localhost-only relay
+  (`127.0.0.1:8787`) strips that field and forwards everything else to api.anthropic.com,
+  streaming included. Point the Claude models' `api_base` at `http://127.0.0.1:8787/v1`.
+  Remove it once PicoClaw stops sending `temperature`.
+
+Models configured in `~/.picoclaw/config.json`: `claude` (claude-sonnet-5-5, default) and
+`claude-fast` (claude-haiku-5-5). PicoClaw's tools stay inside `~/.picoclaw/workspace`.
 
 ## beepy-home
 
@@ -100,12 +119,17 @@ sudo install -m 644 beepy-pet/beepy-pet-notify.service beepy-pet/beepy-pet-notif
 sudo install -m 755 beepy-button/beepy-button.py /usr/local/bin/beepy-button
 sudo install -m 644 beepy-button/beepy-button.service /etc/systemd/system/
 
+# PicoClaw helpers (after installing picoclaw_armv7.deb and running `picoclaw onboard`)
+sudo install -m 755 beepy-claw/set-claude-key /usr/local/bin/set-claude-key
+sudo install -m 755 beepy-claw/claude-param-proxy.py /usr/local/bin/claude-param-proxy
+sudo install -m 644 beepy-claw/claude-param-proxy.service /etc/systemd/system/
+
 # Home screen + neofetch
 sudo install -m 755 beepy-home/home /usr/local/bin/home
 install -D -m 644 beepy-home/neofetch-config.conf ~/.config/neofetch/config.conf
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now beepy-pager beepy-pet-notify.timer beepy-button
+sudo systemctl enable --now beepy-pager beepy-pet-notify.timer beepy-button claude-param-proxy
 sudo reboot   # applies the LED permission
 ```
 
