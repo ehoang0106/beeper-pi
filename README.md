@@ -68,7 +68,8 @@ cd beepy-pet && python3 -m unittest test_pet_state test_pet_new_games test_pet_r
 The side button is wired to **GPIO 17** (active low, needs the internal pull-up). A small
 service waits for presses with `gpiod`:
 
-- **single press**: show `home` as a full-screen tmux popup (any key closes it)
+- **single press**: show `home` as a full-screen tmux popup (any key closes it); inside the
+  PicoClaw window it scrolls up a page instead (Back or `q` returns to the prompt)
 - **double press**: open `pet` as a popup, or jump to the tmux window where `pet` already runs
 - **hold (~1 s)**: open the PicoClaw AI assistant (`claw`) in its own tmux window named
   `claw` (a window, not a popup, so long answers keep scrollback), or jump back to it

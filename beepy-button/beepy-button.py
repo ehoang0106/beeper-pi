@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Beepy side button (GPIO 17): single press shows `home`, double press opens `pet`,
+"""Beepy side button (GPIO 17): single press shows `home` (or, in the PicoClaw window,
+scrolls up a page), double press opens `pet`,
 hold (~1 s) opens the PicoClaw AI assistant in its own tmux window (scrollable).
 
 The button shorts GPIO 17 to ground, so the line uses the Pi's internal pull-up and a
@@ -80,8 +81,18 @@ def running_pet_window():
 def on_single(client):
     if close_popup(client):
         print("button: closed popup", flush=True)
-    else:
-        open_popup(client, "home")
+        return
+    window, in_mode = (tmux("display-message", "-p", "-c", client, "#{window_name} #{pane_in_mode}")
+                       .stdout.split() + ["", ""])[:2]
+    if window == CLAW_WINDOW:
+        # In the PicoClaw chat a press scrolls up a page (Back/q returns to the prompt).
+        if in_mode == "1":
+            tmux("send-keys", "-t", f"{CLAW_WINDOW}", "-X", "page-up")
+        else:
+            tmux("copy-mode", "-u", "-t", f"{CLAW_WINDOW}")
+        print("button: scrolled claw up a page", flush=True)
+        return
+    open_popup(client, "home")
 
 
 def on_double(client):
