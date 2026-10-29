@@ -28,7 +28,8 @@ the terminal with `wall`.
   because ntfy.sh's free quota is per IP and Apps Script shares Google's IPs.
 - **Outlook**: a Power Automate flow ("When a new email arrives" → "Send an email" to
   `ntfy-<topic>@ntfy.sh`) pages blue. Note ntfy.sh only accepts 5 e-mails/day per sender IP.
-- **Wi-Fi watch**: the LED turns solid red while `wlan0` has no link (experimental).
+- **Wi-Fi watch**: the LED turns solid red after ~6 s without a `wlan0` link, and goes back
+  to off (or an unread page's colour) when it reconnects.
 
 Send a page from anywhere:
 
